@@ -1,0 +1,43 @@
+name: Fetch soccer fixtures
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: Date YYYY-MM-DD
+        required: true
+        type: string
+  repository_dispatch:
+    types: [fetch_matches]
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests beautifulsoup4
+      - name: Resolve date
+        id: date
+        env:
+          INPUT_DATE: ${{ inputs.date }}
+          EVENT_DATE: ${{ github.event.client_payload.date }}
+        run: |
+          D="$INPUT_DATE"
+          if [ -z "$D" ]; then D="$EVENT_DATE"; fi
+          if [ -z "$D" ]; then D=$(date -u +%F); fi
+          python -c "from datetime import datetime; datetime.strptime('$D','%Y-%m-%d')"
+          echo "date=$D" >> "$GITHUB_OUTPUT"
+      - run: python scripts/fetch_fixtures.py --date "${{ steps.date.outputs.date }}"
+      - name: Commit data
+        run: |
+          git config user.name muno-actions
+          git config user.email actions@users.noreply.github.com
+          git add data/matches.json
+          if ! git diff --cached --quiet; then
+            git commit -m "data: refresh fixtures for ${{ steps.date.outputs.date }}"
+            git push origin main
+          fi
