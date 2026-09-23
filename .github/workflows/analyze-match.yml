@@ -1,0 +1,59 @@
+name: Analyze soccer match
+on:
+  workflow_dispatch:
+    inputs:
+      match_id:
+        description: Match ID
+        required: true
+        type: string
+      home_team:
+        description: Home team
+        required: true
+        type: string
+      away_team:
+        description: Away team
+        required: true
+        type: string
+  repository_dispatch:
+    types: [analyze_match]
+permissions:
+  contents: write
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests beautifulsoup4
+      - name: Resolve inputs
+        id: args
+        env:
+          EID: ${{ github.event.client_payload.match_id }}
+          EH: ${{ github.event.client_payload.home_team }}
+          EA: ${{ github.event.client_payload.away_team }}
+          IID: ${{ inputs.match_id }}
+          IH: ${{ inputs.home_team }}
+          IA: ${{ inputs.away_team }}
+        run: |
+          ID="$IID"; H="$IH"; A="$IA"
+          if [ -z "$ID" ]; then ID="$EID"; H="$EH"; A="$EA"; fi
+          test -n "$ID" && test -n "$H" && test -n "$A"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "home=$H" >> "$GITHUB_OUTPUT"
+          echo "away=$A" >> "$GITHUB_OUTPUT"
+      - name: Analyze
+        env:
+          OPENROUTER_KEYS_JSON: ${{ secrets.OPENROUTER_KEYS_JSON }}
+        run: python scripts/analyze_match.py --match-id "${{ steps.args.outputs.id }}" --home "${{ steps.args.outputs.home }}" --away "${{ steps.args.outputs.away }}"
+      - name: Commit analysis
+        run: |
+          git config user.name muno-actions
+          git config user.email actions@users.noreply.github.com
+          git add data/analyses/
+          if ! git diff --cached --quiet; then
+            git commit -m "data: analyze ${{ steps.args.outputs.id }}"
+            git push origin main
+          fi
