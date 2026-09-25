@@ -203,7 +203,11 @@
       while (attempts < POE_KEYS.length) {
         const apiKey = POE_KEYS[currentKeyIndex];
         try {
-          const res = await fetch("https://api.poe.com/v1/chat/completions", {
+          // Wrap request through corsproxy.io to bypass browser CORS blocking
+          const targetUrl = "https://api.poe.com/v1/chat/completions";
+          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+          const res = await fetch(proxyUrl, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${apiKey}`,
@@ -219,17 +223,17 @@
             const result = await res.json();
             return result.choices[0].message.content;
           } else {
-            throw new Error(`Key ${currentKeyIndex} failed: ${res.status}`);
+            console.error(`Key Index ${currentKeyIndex} HTTP Error: ${res.status}`);
+            throw new Error(`Status ${res.status}`);
           }
         } catch (err) {
-          console.warn(`Poe Key Index ${currentKeyIndex} failed. Rotating key...`);
+          console.warn(`Poe Key Index ${currentKeyIndex} failed: ${err.message}. Rotating key...`);
           currentKeyIndex = (currentKeyIndex + 1) % POE_KEYS.length;
           attempts++;
         }
       }
-      throw new Error("All Poe API Keys exhausted or rate-limited.");
+      throw new Error("All Poe API Keys failed or returned CORS/HTTP errors.");
     }
-
     async function runAIAnalysis() {
       if (!currentTeamData) return;
       const panel = document.getElementById('analytics-panel');
