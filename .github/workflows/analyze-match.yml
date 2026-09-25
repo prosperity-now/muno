@@ -21,7 +21,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: muno-analysis
+  group: muno-data
   cancel-in-progress: false
 jobs:
   analyze:
