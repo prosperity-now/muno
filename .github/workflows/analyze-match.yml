@@ -1,23 +1,28 @@
 name: Analyze soccer match
 on:
+  schedule:
+    - cron: "37 */2 * * *"
   workflow_dispatch:
     inputs:
       match_id:
-        description: Match ID
-        required: true
+        description: Match ID (leave blank to analyze today's fixtures)
+        required: false
         type: string
       home_team:
         description: Home team
-        required: true
+        required: false
         type: string
       away_team:
         description: Away team
-        required: true
+        required: false
         type: string
   repository_dispatch:
     types: [analyze_match]
 permissions:
   contents: write
+concurrency:
+  group: muno-analysis
+  queue: max
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -28,7 +33,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install requests beautifulsoup4
-      - name: Resolve inputs
+      - name: Resolve requested match
         id: args
         env:
           EID: ${{ github.event.client_payload.match_id }}
@@ -40,20 +45,54 @@ jobs:
         run: |
           ID="$IID"; H="$IH"; A="$IA"
           if [ -z "$ID" ]; then ID="$EID"; H="$EH"; A="$EA"; fi
-          test -n "$ID" && test -n "$H" && test -n "$A"
           echo "id=$ID" >> "$GITHUB_OUTPUT"
           echo "home=$H" >> "$GITHUB_OUTPUT"
           echo "away=$A" >> "$GITHUB_OUTPUT"
-      - name: Analyze
+      - name: Analyze one requested match
+        if: ${{ steps.args.outputs.id != '' && steps.args.outputs.home != '' && steps.args.outputs.away != '' }}
         env:
           OPENROUTER_KEYS_JSON: ${{ secrets.OPENROUTER_KEYS_JSON }}
-        run: python scripts/analyze_match.py --match-id "${{ steps.args.outputs.id }}" --home "${{ steps.args.outputs.home }}" --away "${{ steps.args.outputs.away }}"
-      - name: Commit analysis
+        run: |
+          python scripts/analyze_match.py             --match-id "${{ steps.args.outputs.id }}"             --home "${{ steps.args.outputs.home }}"             --away "${{ steps.args.outputs.away }}"
+      - name: Analyze today's fixtures
+        if: ${{ steps.args.outputs.id == '' || steps.args.outputs.home == '' || steps.args.outputs.away == '' }}
+        env:
+          OPENROUTER_KEYS_JSON: ${{ secrets.OPENROUTER_KEYS_JSON }}
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from datetime import datetime, timezone
+          today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+          with open("data/matches.json", encoding="utf-8") as f:
+              data = json.load(f)
+          matches = data if isinstance(data, list) else data.get("matches", [])
+          today_matches = [m for m in matches if m.get("date") == today]
+          print(f"Found {len(today_matches)} fixtures for {today}")
+          for m in today_matches:
+              home = m.get("home_team", {})
+              away = m.get("away_team", {})
+              home = home.get("name") if isinstance(home, dict) else home
+              away = away.get("name") if isinstance(away, dict) else away
+              match_id = m.get("match_id") or m.get("id")
+              if not match_id or not home or not away:
+                  print("Skipping incomplete fixture:", m)
+                  continue
+              print(f"Analyzing {home} vs {away}")
+              subprocess.run([
+                  "python", "scripts/analyze_match.py",
+                  "--match-id", str(match_id),
+                  "--home", str(home),
+                  "--away", str(away)
+              ], check=True)
+          PY
+      - name: Commit analysis data
         run: |
           git config user.name muno-actions
           git config user.email actions@users.noreply.github.com
           git add data/analyses/
           if ! git diff --cached --quiet; then
-            git commit -m "data: analyze ${{ steps.args.outputs.id }}"
+            git commit -m "data: refresh match analysis"
             git push origin main
+          else
+            echo "No analysis changes."
           fi
