@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: muno-fixtures
+  group: muno-data
   cancel-in-progress: false
 
 jobs:
@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -55,14 +57,32 @@ jobs:
       - name: Fetch fixtures
         run: python scripts/fetch_fixtures.py --date "${{ steps.date.outputs.date }}"
 
+      - name: Validate fixture data
+        env:
+          TARGET_DATE: ${{ steps.date.outputs.date }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, sys
+          with open("data/matches.json", encoding="utf-8") as f:
+              data = json.load(f)
+          matches = data if isinstance(data, list) else data.get("matches", [])
+          target = os.environ["TARGET_DATE"]
+          today = [m for m in matches if m.get("date") == target]
+          if not today:
+              print(f"ERROR: no fixtures exist for {target}", file=sys.stderr)
+              sys.exit(1)
+          print(f"Validated {len(today)} fixtures for {target}")
+          PY
+
       - name: Commit fixture data
         run: |
-          set -e
+          set -euo pipefail
           git config user.name "muno-actions"
           git config user.email "actions@users.noreply.github.com"
           git add data/matches.json
           if git diff --cached --quiet; then
-            echo "No fixture changes."
+            echo "Fixture data is already current."
           else
             git commit -m "data: refresh fixtures for ${{ steps.date.outputs.date }}"
             git push origin main
@@ -74,6 +94,10 @@ jobs:
           TARGET_DATE: ${{ steps.date.outputs.date }}
         run: |
           set -euo pipefail
+          if [ -z "${OPENROUTER_KEYS_JSON:-}" ]; then
+            echo "ERROR: OPENROUTER_KEYS_JSON repository secret is not configured." >&2
+            exit 1
+          fi
           python - <<'PY'
           import json, os, subprocess, sys
           target = os.environ["TARGET_DATE"]
@@ -82,20 +106,31 @@ jobs:
           matches = data if isinstance(data, list) else data.get("matches", [])
           matches = [m for m in matches if m.get("date") == target]
           print(f"Found {len(matches)} fixtures for {target}")
+
           failures = 0
-          for m in matches:
-              home = m.get("home_team", {})
-              away = m.get("away_team", {})
+          for match in matches:
+              home = match.get("home_team", {})
+              away = match.get("away_team", {})
               home = home.get("name") if isinstance(home, dict) else home
               away = away.get("name") if isinstance(away, dict) else away
-              match_id = m.get("match_id") or m.get("id")
+              match_id = match.get("match_id") or match.get("id")
+
               if not match_id or not home or not away:
-                  print("Skipping incomplete fixture:", m)
+                  print("Skipping incomplete fixture:", match, file=sys.stderr)
+                  failures += 1
                   continue
+
               print(f"Analyzing: {home} vs {away}")
-              result = subprocess.run([sys.executable, "scripts/analyze_match.py", "--match-id", str(match_id), "--home", str(home), "--away", str(away)])
+              result = subprocess.run([
+                  sys.executable,
+                  "scripts/analyze_match.py",
+                  "--match-id", str(match_id),
+                  "--home", str(home),
+                  "--away", str(away),
+              ])
               if result.returncode != 0:
                   failures += 1
+
           if failures:
               print(f"{failures} analysis job(s) failed.", file=sys.stderr)
               sys.exit(1)
@@ -103,7 +138,7 @@ jobs:
 
       - name: Commit analysis data
         run: |
-          set -e
+          set -euo pipefail
           git config user.name "muno-actions"
           git config user.email "actions@users.noreply.github.com"
           git add data/analyses/
