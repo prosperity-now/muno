@@ -21,16 +21,22 @@
 <body class="bg-pitch-900 text-slate-100 min-h-screen font-sans antialiased p-4 md:p-6">
   <div class="max-w-7xl mx-auto space-y-6">
     <!-- Header -->
-    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-pitch-700 pb-4 gap-4">
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-pitch-700 pb-4 gap-4">
       <div class="flex items-center gap-3">
         <svg class="w-6 h-6 text-pitch-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
         </svg>
         <h1 class="text-xl font-bold text-pitch-400 tracking-wider">PITCH//ANALYTICS</h1>
       </div>
-      <div class="flex items-center gap-3 w-full sm:w-auto">
-        <input id="team-search-input" type="text" value="Arsenal" placeholder="Search Team..." class="bg-pitch-800 border border-pitch-700 text-xs px-3 py-2 rounded focus:outline-none focus:border-pitch-400 text-slate-200 w-full sm:w-48" />
-        <button onclick="searchAndLoad()" class="text-xs bg-pitch-700 hover:bg-pitch-500 text-slate-200 px-3 py-2 rounded transition font-medium whitespace-nowrap flex items-center gap-1">
+
+      <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        <!-- Date Selector -->
+        <input id="match-date-input" type="date" class="bg-pitch-800 border border-pitch-700 text-xs px-3 py-2 rounded focus:outline-none focus:border-pitch-400 text-slate-200" onchange="fetchFixturesByDate()" />
+
+        <!-- Team Search -->
+        <input id="team-search-input" type="text" value="Arsenal" placeholder="Search Team..." class="bg-pitch-800 border border-pitch-700 text-xs px-3 py-2 rounded focus:outline-none focus:border-pitch-400 text-slate-200 flex-1 md:w-40" />
+
+        <button onclick="searchAndLoad()" class="text-xs bg-pitch-700 hover:bg-pitch-500 text-slate-200 px-3 py-2 rounded transition font-medium flex items-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           Search
         </button>
@@ -53,7 +59,10 @@
         </div>
 
         <div class="bg-pitch-800 border border-pitch-700 rounded-lg p-4">
-          <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Upcoming Matches</h2>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Scheduled Matches</h2>
+            <span id="date-label" class="text-[10px] text-pitch-400">All Upcoming</span>
+          </div>
           <div id="fixtures-list" class="space-y-2 text-xs text-slate-400">Loading fixtures...</div>
         </div>
       </div>
@@ -66,13 +75,13 @@
             AI Tactical Match Analysis
           </h2>
           <button id="analyze-btn" onclick="runAIAnalysis()" class="text-xs bg-pitch-500 hover:bg-pitch-400 text-pitch-900 font-bold px-4 py-2 rounded transition flex items-center gap-2 disabled:opacity-50" disabled>
-            Run Gemini AI Analysis
+            Run Poe AI Analysis
           </button>
         </div>
 
         <div id="analytics-panel" class="space-y-6">
           <div class="text-center py-12 text-slate-500 text-sm">
-            Load team profiles to initialize tactical data breakdown.
+            Load team profiles or select matches to initialize tactical data breakdown.
           </div>
         </div>
       </div>
@@ -81,14 +90,17 @@
   </div>
 
   <script>
-    // OpenRouter Key Rotation Array
-    const OPENROUTER_KEYS = [
-      "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",
-      "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",
-      "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"
+    // Poe API Keys Rotation
+    const POE_KEYS = [
+      "sk-poe-SNNNjI4eTc5KEp6Q0nYDHwNA732afdKNRDvoxwLLU4M",
+      "sk-poe-hIO213QBHU6BjsxECHQPhTHgfvfolFWtrRtYFGupqQQ",
+      "sk-poe-8HnOrmbosDsltWZD7JyIIE50-wag7UgYkqHDLAIguh0"
     ];
     let currentKeyIndex = 0;
     let currentTeamData = null;
+
+    // Set default date input to today
+    document.getElementById('match-date-input').value = new Date().toISOString().split('T')[0];
 
     async function searchAndLoad() {
       const query = document.getElementById('team-search-input').value.trim() || 'Arsenal';
@@ -133,6 +145,7 @@
 
     async function fetchFixtures(teamId) {
       const container = document.getElementById('fixtures-list');
+      document.getElementById('date-label').innerText = "Upcoming Matches";
       container.innerHTML = 'Loading schedule...';
       try {
         const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsnext.php?id=${teamId}`);
@@ -143,34 +156,61 @@
           return;
         }
 
-        container.innerHTML = data.events.slice(0, 4).map(e => `
-          <div class="p-2.5 bg-pitch-900/60 border border-pitch-700/50 rounded flex items-center justify-between text-xs hover:border-pitch-400 transition">
-            <div>
-              <div class="font-medium text-slate-200">${e.strEvent}</div>
-              <div class="text-[10px] text-slate-500">${e.dateEvent} @ ${e.strTime ? e.strTime.substring(0,5) : 'TBD'}</div>
-            </div>
-            <span class="text-[10px] text-pitch-400 bg-pitch-500/10 px-2 py-0.5 rounded border border-pitch-500/20">${e.strLeague}</span>
-          </div>
-        `).join('');
-
+        renderFixturesList(data.events.slice(0, 5));
       } catch (err) {
         container.innerHTML = '<div class="text-xs text-slate-500">Fixtures unavailable.</div>';
       }
     }
 
-    async function callOpenRouter(promptText) {
+    async function fetchFixturesByDate() {
+      const selectedDate = document.getElementById('match-date-input').value;
+      if (!selectedDate) return;
+
+      const container = document.getElementById('fixtures-list');
+      document.getElementById('date-label').innerText = selectedDate;
+      container.innerHTML = 'Fetching date fixtures...';
+
+      try {
+        const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${selectedDate}&s=Soccer`);
+        const data = await res.json();
+
+        if (!data.events || data.events.length === 0) {
+          container.innerHTML = `<div class="p-2 text-slate-500">No soccer fixtures on ${selectedDate}.</div>`;
+          return;
+        }
+
+        renderFixturesList(data.events.slice(0, 5));
+      } catch (err) {
+        container.innerHTML = '<div class="text-xs text-slate-500">Failed to load fixtures for selected date.</div>';
+      }
+    }
+
+    function renderFixturesList(events) {
+      const container = document.getElementById('fixtures-list');
+      container.innerHTML = events.map(e => `
+        <div class="p-2.5 bg-pitch-900/60 border border-pitch-700/50 rounded flex items-center justify-between text-xs hover:border-pitch-400 transition cursor-pointer">
+          <div>
+            <div class="font-medium text-slate-200">${e.strEvent}</div>
+            <div class="text-[10px] text-slate-500">${e.dateEvent} @ ${e.strTime ? e.strTime.substring(0,5) : 'TBD'}</div>
+          </div>
+          <span class="text-[10px] text-pitch-400 bg-pitch-500/10 px-2 py-0.5 rounded border border-pitch-500/20">${e.strLeague || 'Soccer'}</span>
+        </div>
+      `).join('');
+    }
+
+    async function callPoeAPI(promptText) {
       let attempts = 0;
-      while (attempts < OPENROUTER_KEYS.length) {
-        const apiKey = OPENROUTER_KEYS[currentKeyIndex];
+      while (attempts < POE_KEYS.length) {
+        const apiKey = POE_KEYS[currentKeyIndex];
         try {
-          const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          const res = await fetch("https://api.poe.com/v1/chat/completions", {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${apiKey}`,
               "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
+              model: "GPT-4o",
               messages: [{ role: "user", content: promptText }]
             })
           });
@@ -182,12 +222,12 @@
             throw new Error(`Key ${currentKeyIndex} failed: ${res.status}`);
           }
         } catch (err) {
-          console.warn(`Key Index ${currentKeyIndex} failed. Rotating to next key...`);
-          currentKeyIndex = (currentKeyIndex + 1) % OPENROUTER_KEYS.length;
+          console.warn(`Poe Key Index ${currentKeyIndex} failed. Rotating key...`);
+          currentKeyIndex = (currentKeyIndex + 1) % POE_KEYS.length;
           attempts++;
         }
       }
-      throw new Error("All API Keys exhausted or rate-limited.");
+      throw new Error("All Poe API Keys exhausted or rate-limited.");
     }
 
     async function runAIAnalysis() {
@@ -196,7 +236,7 @@
       panel.innerHTML = `
         <div class="text-center py-12 space-y-3">
           <div class="inline-block w-6 h-6 border-2 border-pitch-400 border-t-transparent rounded-full animate-spin"></div>
-          <div class="text-xs text-slate-400">Synthesizing live tactical telemetry via OpenRouter Gemini...</div>
+          <div class="text-xs text-slate-400">Synthesizing live tactical telemetry via Poe API...</div>
         </div>
       `;
 
@@ -211,7 +251,7 @@
       }`;
 
       try {
-        const rawResponse = await callOpenRouter(prompt);
+        const rawResponse = await callPoeAPI(prompt);
         const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
         const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawResponse);
 
