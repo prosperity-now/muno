@@ -18,22 +18,247 @@
     }
   </script>
 </head>
-<body class="bg-pitch-900 text-slate-100 min-h-screen font-sans antialiased p-6">
-  <div class="max-w-6xl mx-auto space-y-6">
-    <header class="flex justify-between items-center border-b border-pitch-700 pb-4">
-      <h1 class="text-xl font-bold text-pitch-400 tracking-wider">PITCH//ANALYTICS</h1>
-      <div class="text-sm text-slate-400">System Ready</div>
+<body class="bg-pitch-900 text-slate-100 min-h-screen font-sans antialiased p-4 md:p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-pitch-700 pb-4 gap-4">
+      <div class="flex items-center gap-3">
+        <svg class="w-6 h-6 text-pitch-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        <h1 class="text-xl font-bold text-pitch-400 tracking-wider">PITCH//ANALYTICS</h1>
+      </div>
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        <input id="team-search-input" type="text" value="Arsenal" placeholder="Search Team..." class="bg-pitch-800 border border-pitch-700 text-xs px-3 py-2 rounded focus:outline-none focus:border-pitch-400 text-slate-200 w-full sm:w-48" />
+        <button onclick="searchAndLoad()" class="text-xs bg-pitch-700 hover:bg-pitch-500 text-slate-200 px-3 py-2 rounded transition font-medium whitespace-nowrap flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          Search
+        </button>
+      </div>
     </header>
-    <main id="app" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div id="fixtures" class="md:col-span-1 bg-pitch-800 border border-pitch-700 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Upcoming Fixtures</h2>
-        <div id="fixtures-list" class="space-y-3 text-sm text-slate-400">Loading fixtures...</div>
+
+    <!-- Main Grid Layout -->
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Left Column: Search Result & Match Overview -->
+      <div class="lg:col-span-1 space-y-6">
+        <div class="bg-pitch-800 border border-pitch-700 rounded-lg p-4 space-y-4">
+          <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+            <span>Selected Team Profile</span>
+            <span id="api-status" class="text-[10px] text-pitch-400 bg-pitch-500/10 px-2 py-0.5 rounded border border-pitch-500/20">TheSportsDB API</span>
+          </h2>
+          <div id="team-card" class="space-y-4">
+            <div class="text-xs text-slate-500">Searching team data...</div>
+          </div>
+        </div>
+
+        <div class="bg-pitch-800 border border-pitch-700 rounded-lg p-4">
+          <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Upcoming Matches</h2>
+          <div id="fixtures-list" class="space-y-2 text-xs text-slate-400">Loading fixtures...</div>
+        </div>
       </div>
-      <div id="analytics" class="md:col-span-2 bg-pitch-800 border border-pitch-700 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Match Analysis</h2>
-        <div id="analysis-content" class="text-sm text-slate-400">Select a fixture to generate analysis.</div>
+
+      <!-- Right Column: AI Analytics Engine -->
+      <div class="lg:col-span-2 bg-pitch-800 border border-pitch-700 rounded-lg p-4 md:p-6 space-y-6">
+        <div class="flex items-center justify-between border-b border-pitch-700/60 pb-3">
+          <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+            <svg class="w-4 h-4 text-pitch-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            AI Tactical Match Analysis
+          </h2>
+          <button id="analyze-btn" onclick="runAIAnalysis()" class="text-xs bg-pitch-500 hover:bg-pitch-400 text-pitch-900 font-bold px-4 py-2 rounded transition flex items-center gap-2 disabled:opacity-50" disabled>
+            Run Gemini AI Analysis
+          </button>
+        </div>
+
+        <div id="analytics-panel" class="space-y-6">
+          <div class="text-center py-12 text-slate-500 text-sm">
+            Load team profiles to initialize tactical data breakdown.
+          </div>
+        </div>
       </div>
+
     </main>
   </div>
+
+  <script>
+    // OpenRouter Key Rotation Array
+    const OPENROUTER_KEYS = [
+      "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",
+      "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",
+      "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"
+    ];
+    let currentKeyIndex = 0;
+    let currentTeamData = null;
+
+    async function searchAndLoad() {
+      const query = document.getElementById('team-search-input').value.trim() || 'Arsenal';
+      const card = document.getElementById('team-card');
+      card.innerHTML = '<div class="text-xs text-slate-400">Fetching team...</div>';
+
+      try {
+        const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/searchteams.php?t=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        
+        if (!data.teams || data.teams.length === 0) {
+          card.innerHTML = '<div class="text-xs text-rose-400">Team not found.</div>';
+          document.getElementById('analyze-btn').disabled = true;
+          return;
+        }
+
+        const team = data.teams[0];
+        currentTeamData = team;
+        
+        card.innerHTML = `
+          <div class="relative rounded-lg overflow-hidden border border-pitch-700 bg-pitch-900/80">
+            ${team.strStadiumThumb ? `<img src="${team.strStadiumThumb}" class="w-full h-28 object-cover opacity-30" />` : ''}
+            <div class="p-4 flex items-center gap-4 ${team.strStadiumThumb ? 'absolute inset-0 bg-gradient-to-t from-pitch-900 via-pitch-900/80 to-transparent' : ''}">
+              <img src="${team.strBadge}" alt="${team.strTeam}" class="w-14 h-14 object-contain filter drop-shadow" />
+              <div>
+                <h3 class="text-base font-bold text-slate-100">${team.strTeam}</h3>
+                <p class="text-xs text-pitch-400">${team.strLeague || 'Football Club'}</p>
+                <p class="text-[10px] text-slate-400 mt-1">${team.strStadium || 'Home Ground'}</p>
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-slate-300 line-clamp-3 leading-relaxed">${team.strDescriptionEN || 'No club summary available.'}</p>
+        `;
+
+        document.getElementById('analyze-btn').disabled = false;
+        fetchFixtures(team.idTeam);
+
+      } catch (e) {
+        card.innerHTML = '<div class="text-xs text-rose-400">Failed to load team data.</div>';
+      }
+    }
+
+    async function fetchFixtures(teamId) {
+      const container = document.getElementById('fixtures-list');
+      container.innerHTML = 'Loading schedule...';
+      try {
+        const res = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsnext.php?id=${teamId}`);
+        const data = await res.json();
+        
+        if (!data.events) {
+          container.innerHTML = '<div class="p-2 text-slate-500">No scheduled upcoming matches.</div>';
+          return;
+        }
+
+        container.innerHTML = data.events.slice(0, 4).map(e => `
+          <div class="p-2.5 bg-pitch-900/60 border border-pitch-700/50 rounded flex items-center justify-between text-xs hover:border-pitch-400 transition">
+            <div>
+              <div class="font-medium text-slate-200">${e.strEvent}</div>
+              <div class="text-[10px] text-slate-500">${e.dateEvent} @ ${e.strTime ? e.strTime.substring(0,5) : 'TBD'}</div>
+            </div>
+            <span class="text-[10px] text-pitch-400 bg-pitch-500/10 px-2 py-0.5 rounded border border-pitch-500/20">${e.strLeague}</span>
+          </div>
+        `).join('');
+
+      } catch (err) {
+        container.innerHTML = '<div class="text-xs text-slate-500">Fixtures unavailable.</div>';
+      }
+    }
+
+    async function callOpenRouter(promptText) {
+      let attempts = 0;
+      while (attempts < OPENROUTER_KEYS.length) {
+        const apiKey = OPENROUTER_KEYS[currentKeyIndex];
+        try {
+          const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [{ role: "user", content: promptText }]
+            })
+          });
+
+          if (res.ok) {
+            const result = await res.json();
+            return result.choices[0].message.content;
+          } else {
+            throw new Error(`Key ${currentKeyIndex} failed: ${res.status}`);
+          }
+        } catch (err) {
+          console.warn(`Key Index ${currentKeyIndex} failed. Rotating to next key...`);
+          currentKeyIndex = (currentKeyIndex + 1) % OPENROUTER_KEYS.length;
+          attempts++;
+        }
+      }
+      throw new Error("All API Keys exhausted or rate-limited.");
+    }
+
+    async function runAIAnalysis() {
+      if (!currentTeamData) return;
+      const panel = document.getElementById('analytics-panel');
+      panel.innerHTML = `
+        <div class="text-center py-12 space-y-3">
+          <div class="inline-block w-6 h-6 border-2 border-pitch-400 border-t-transparent rounded-full animate-spin"></div>
+          <div class="text-xs text-slate-400">Synthesizing live tactical telemetry via OpenRouter Gemini...</div>
+        </div>
+      `;
+
+      const prompt = `Analyze tactical form and upcoming probabilities for ${currentTeamData.strTeam} playing in ${currentTeamData.strLeague}.
+      Provide output ONLY in raw JSON matching this structure:
+      {
+        "winProbability": 68,
+        "drawProbability": 20,
+        "lossProbability": 12,
+        "keyAbsences": ["Player A (Hamstring)", "Player B (Suspended)"],
+        "tacticalSummary": "Short concise tactical breakdown of team setup, recent form, and strengths."
+      }`;
+
+      try {
+        const rawResponse = await callOpenRouter(prompt);
+        const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawResponse);
+
+        panel.innerHTML = `
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Win Probability</div>
+              <div class="text-2xl font-bold text-pitch-400">${parsed.winProbability}%</div>
+            </div>
+            <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Draw Chance</div>
+              <div class="text-2xl font-bold text-slate-300">${parsed.drawProbability}%</div>
+            </div>
+            <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Loss Risk</div>
+              <div class="text-2xl font-bold text-rose-400">${parsed.lossProbability}%</div>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div class="text-xs font-semibold text-slate-300">Win Rate Probability Gauge</div>
+            <div class="w-full bg-pitch-900 rounded-full h-3 border border-pitch-700 overflow-hidden flex">
+              <div class="bg-pitch-400 h-full" style="width: ${parsed.winProbability}%"></div>
+              <div class="bg-slate-600 h-full" style="width: ${parsed.drawProbability}%"></div>
+              <div class="bg-rose-500 h-full" style="width: ${parsed.lossProbability}%"></div>
+            </div>
+          </div>
+
+          <div class="bg-pitch-900/40 border border-pitch-700/50 p-4 rounded space-y-2">
+            <div class="text-xs font-semibold text-slate-300">Tactical Rationale</div>
+            <p class="text-xs text-slate-400 leading-relaxed">${parsed.tacticalSummary}</p>
+          </div>
+
+          <div class="bg-pitch-900/40 border border-pitch-700/50 p-4 rounded space-y-2">
+            <div class="text-xs font-semibold text-slate-300">Player Impact & Absences</div>
+            <ul class="text-xs text-slate-400 space-y-1 list-disc list-inside">
+              ${parsed.keyAbsences.map(item => `<li>${item}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+      } catch (err) {
+        panel.innerHTML = `<div class="p-4 bg-rose-950/30 border border-rose-800 text-rose-300 rounded text-xs">Failed to run AI analysis: ${err.message}</div>`;
+      }
+    }
+
+    // Initial search on load
+    searchAndLoad();
+  </script>
 </body>
 </html>
