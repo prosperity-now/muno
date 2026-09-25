@@ -22,7 +22,7 @@ permissions:
   contents: write
 concurrency:
   group: muno-analysis
-  queue: max
+  cancel-in-progress: false
 jobs:
   analyze:
     runs-on: ubuntu-latest
