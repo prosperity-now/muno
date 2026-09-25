@@ -1,15 +1,20 @@
 name: Fetch soccer fixtures
 on:
+  schedule:
+    - cron: "17 */6 * * *"
   workflow_dispatch:
     inputs:
       date:
         description: Date YYYY-MM-DD
-        required: true
+        required: false
         type: string
   repository_dispatch:
     types: [fetch_matches]
 permissions:
   contents: write
+concurrency:
+  group: muno-fixtures
+  queue: max
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -31,8 +36,9 @@ jobs:
           if [ -z "$D" ]; then D=$(date -u +%F); fi
           python -c "from datetime import datetime; datetime.strptime('$D','%Y-%m-%d')"
           echo "date=$D" >> "$GITHUB_OUTPUT"
-      - run: python scripts/fetch_fixtures.py --date "${{ steps.date.outputs.date }}"
-      - name: Commit data
+      - name: Fetch fixtures
+        run: python scripts/fetch_fixtures.py --date "${{ steps.date.outputs.date }}"
+      - name: Commit fixture data
         run: |
           git config user.name muno-actions
           git config user.email actions@users.noreply.github.com
@@ -40,4 +46,13 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "data: refresh fixtures for ${{ steps.date.outputs.date }}"
             git push origin main
+          else
+            echo "No fixture changes."
           fi
+      - name: Trigger analysis pipeline
+        if: ${{ secrets.MUNO_GITHUB_PAT != '' }}
+        env:
+          MUNO_GITHUB_PAT: ${{ secrets.MUNO_GITHUB_PAT }}
+        run: |
+          sleep 5
+          curl --fail-with-body --silent --show-error             -X POST             -H "Accept: application/vnd.github+json"             -H "Authorization: Bearer $MUNO_GITHUB_PAT"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${{ github.repository }}/dispatches"             -d '{"event_type":"analyze_match","client_payload":{"reason":"fixtures_refreshed","date":"${{ steps.date.outputs.date }}"}}'
