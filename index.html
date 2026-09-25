@@ -75,7 +75,7 @@
             AI Tactical Match Analysis
           </h2>
           <button id="analyze-btn" onclick="runAIAnalysis()" class="text-xs bg-pitch-500 hover:bg-pitch-400 text-pitch-900 font-bold px-4 py-2 rounded transition flex items-center gap-2 disabled:opacity-50" disabled>
-            Run Poe AI Analysis
+            Run Gemini AI Analysis
           </button>
         </div>
 
@@ -90,16 +90,14 @@
   </div>
 
   <script>
-    // Poe API Keys Rotation
-    const POE_KEYS = [
-      "sk-poe-SNNNjI4eTc5KEp6Q0nYDHwNA732afdKNRDvoxwLLU4M",
-      "sk-poe-hIO213QBHU6BjsxECHQPhTHgfvfolFWtrRtYFGupqQQ",
-      "sk-poe-8HnOrmbosDsltWZD7JyIIE50-wag7UgYkqHDLAIguh0"
+    const OPENROUTER_KEYS = [
+      "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",
+      "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",
+      "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"
     ];
     let currentKeyIndex = 0;
     let currentTeamData = null;
 
-    // Set default date input to today
     document.getElementById('match-date-input').value = new Date().toISOString().split('T')[0];
 
     async function searchAndLoad() {
@@ -198,49 +196,13 @@
       `).join('');
     }
 
-    async function callPoeAPI(promptText) {
-      let attempts = 0;
-      while (attempts < POE_KEYS.length) {
-        const apiKey = POE_KEYS[currentKeyIndex];
-        try {
-          // Wrap request through corsproxy.io to bypass browser CORS blocking
-          const targetUrl = "https://api.poe.com/v1/chat/completions";
-          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-
-          const res = await fetch(proxyUrl, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${apiKey}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              model: "qwen3.5-omni-flash",
-              messages: [{ role: "user", content: promptText }]
-            })
-          });
-
-          if (res.ok) {
-            const result = await res.json();
-            return result.choices[0].message.content;
-          } else {
-            console.error(`Key Index ${currentKeyIndex} HTTP Error: ${res.status}`);
-            throw new Error(`Status ${res.status}`);
-          }
-        } catch (err) {
-          console.warn(`Poe Key Index ${currentKeyIndex} failed: ${err.message}. Rotating key...`);
-          currentKeyIndex = (currentKeyIndex + 1) % POE_KEYS.length;
-          attempts++;
-        }
-      }
-      throw new Error("All Poe API Keys failed or returned CORS/HTTP errors.");
-    }
     async function runAIAnalysis() {
       if (!currentTeamData) return;
       const panel = document.getElementById('analytics-panel');
       panel.innerHTML = `
         <div class="text-center py-12 space-y-3">
           <div class="inline-block w-6 h-6 border-2 border-pitch-400 border-t-transparent rounded-full animate-spin"></div>
-          <div class="text-xs text-slate-400">Synthesizing live tactical telemetry via Poe API...</div>
+          <div class="text-xs text-slate-400">Synthesizing live tactical telemetry via OpenRouter Gemini...</div>
         </div>
       `;
 
@@ -254,54 +216,78 @@
         "tacticalSummary": "Short concise tactical breakdown of team setup, recent form, and strengths."
       }`;
 
-      try {
-        const rawResponse = await callPoeAPI(prompt);
-        const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawResponse);
+      let success = false;
+      for (let i = 0; i < OPENROUTER_KEYS.length; i++) {
+        const key = OPENROUTER_KEYS[currentKeyIndex];
+        try {
+          const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${key}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [{ role: "user", content: prompt }]
+            })
+          });
 
-        panel.innerHTML = `
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
-              <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Win Probability</div>
-              <div class="text-2xl font-bold text-pitch-400">${parsed.winProbability}%</div>
-            </div>
-            <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
-              <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Draw Chance</div>
-              <div class="text-2xl font-bold text-slate-300">${parsed.drawProbability}%</div>
-            </div>
-            <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
-              <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Loss Risk</div>
-              <div class="text-2xl font-bold text-rose-400">${parsed.lossProbability}%</div>
-            </div>
-          </div>
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-          <div class="space-y-2">
-            <div class="text-xs font-semibold text-slate-300">Win Rate Probability Gauge</div>
-            <div class="w-full bg-pitch-900 rounded-full h-3 border border-pitch-700 overflow-hidden flex">
-              <div class="bg-pitch-400 h-full" style="width: ${parsed.winProbability}%"></div>
-              <div class="bg-slate-600 h-full" style="width: ${parsed.drawProbability}%"></div>
-              <div class="bg-rose-500 h-full" style="width: ${parsed.lossProbability}%"></div>
+          const result = await res.json();
+          const rawResponse = result.choices[0].message.content;
+          const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+          const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : rawResponse);
+
+          panel.innerHTML = `
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
+                <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Win Probability</div>
+                <div class="text-2xl font-bold text-pitch-400">${parsed.winProbability}%</div>
+              </div>
+              <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
+                <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Draw Chance</div>
+                <div class="text-2xl font-bold text-slate-300">${parsed.drawProbability}%</div>
+              </div>
+              <div class="bg-pitch-900/60 border border-pitch-700/50 p-4 rounded text-center">
+                <div class="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Loss Risk</div>
+                <div class="text-2xl font-bold text-rose-400">${parsed.lossProbability}%</div>
+              </div>
             </div>
-          </div>
 
-          <div class="bg-pitch-900/40 border border-pitch-700/50 p-4 rounded space-y-2">
-            <div class="text-xs font-semibold text-slate-300">Tactical Rationale</div>
-            <p class="text-xs text-slate-400 leading-relaxed">${parsed.tacticalSummary}</p>
-          </div>
+            <div class="space-y-2">
+              <div class="text-xs font-semibold text-slate-300">Win Rate Probability Gauge</div>
+              <div class="w-full bg-pitch-900 rounded-full h-3 border border-pitch-700 overflow-hidden flex">
+                <div class="bg-pitch-400 h-full" style="width: ${parsed.winProbability}%"></div>
+                <div class="bg-slate-600 h-full" style="width: ${parsed.drawProbability}%"></div>
+                <div class="bg-rose-500 h-full" style="width: ${parsed.lossProbability}%"></div>
+              </div>
+            </div>
 
-          <div class="bg-pitch-900/40 border border-pitch-700/50 p-4 rounded space-y-2">
-            <div class="text-xs font-semibold text-slate-300">Player Impact & Absences</div>
-            <ul class="text-xs text-slate-400 space-y-1 list-disc list-inside">
-              ${parsed.keyAbsences.map(item => `<li>${item}</li>`).join('')}
-            </ul>
-          </div>
-        `;
-      } catch (err) {
-        panel.innerHTML = `<div class="p-4 bg-rose-950/30 border border-rose-800 text-rose-300 rounded text-xs">Failed to run AI analysis: ${err.message}</div>`;
+            <div class="bg-pitch-900/40 border border-pitch-700/50 p-4 rounded space-y-2">
+              <div class="text-xs font-semibold text-slate-300">Tactical Rationale</div>
+              <p class="text-xs text-slate-400 leading-relaxed">${parsed.tacticalSummary}</p>
+            </div>
+
+            <div class="bg-pitch-900/40 border border-pitch-700/50 p-4 rounded space-y-2">
+              <div class="text-xs font-semibold text-slate-300">Player Impact & Absences</div>
+              <ul class="text-xs text-slate-400 space-y-1 list-disc list-inside">
+                ${parsed.keyAbsences.map(item => `<li>${item}</li>`).join('')}
+              </ul>
+            </div>
+          `;
+          success = true;
+          break;
+        } catch (err) {
+          currentKeyIndex = (currentKeyIndex + 1) % OPENROUTER_KEYS.length;
+        }
+      }
+
+      if (!success) {
+        panel.innerHTML = `<div class="p-4 bg-rose-950/30 border border-rose-800 text-rose-300 rounded text-xs">Failed to run AI analysis: Unable to connect to inference endpoints.</div>`;
       }
     }
 
-    // Initial search on load
     searchAndLoad();
   </script>
 </body>
