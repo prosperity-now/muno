@@ -50,9 +50,12 @@ jobs:
             echo "No fixture changes."
           fi
       - name: Trigger analysis pipeline
-        if: ${{ secrets.MUNO_GITHUB_PAT != '' }}
         env:
           MUNO_GITHUB_PAT: ${{ secrets.MUNO_GITHUB_PAT }}
         run: |
+          if [ -z "$MUNO_GITHUB_PAT" ]; then
+            echo "MUNO_GITHUB_PAT repository secret is not configured."
+            exit 1
+          fi
           sleep 5
           curl --fail-with-body --silent --show-error             -X POST             -H "Accept: application/vnd.github+json"             -H "Authorization: Bearer $MUNO_GITHUB_PAT"             -H "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/${{ github.repository }}/dispatches"             -d '{"event_type":"analyze_match","client_payload":{"reason":"fixtures_refreshed","date":"${{ steps.date.outputs.date }}"}}'
