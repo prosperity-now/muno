@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from browser_use import Agent, ChatOpenAI
+from browser_use import Agent, ChatOpenRouter
 
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/"data"/"browser_fixtures.json"
@@ -53,7 +53,7 @@ async def run_agent(date):
     last=None
     for i,key in enumerate(keys,1):
         try:
-            llm=ChatOpenAI(model="google/gemini-2.5-flash",api_key=key,base_url="https://openrouter.ai/api/v1")
+            llm=ChatOpenRouter(model="google/gemini-2.5-flash", api_key=key)
             agent=Agent(task=TASK.format(date=date),llm=llm,max_steps=80)
             history=await agent.run()
             result=clean_json(history.final_result())
